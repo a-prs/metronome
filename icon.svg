@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#111"/>
+  <g transform="translate(256,256)">
+    <!-- Metronome body -->
+    <polygon points="-70,140 70,140 45,-120 -45,-120" fill="#e8e8e8" stroke="#fff" stroke-width="4"/>
+    <!-- Pendulum arm -->
+    <line x1="0" y1="120" x2="-30" y2="-100" stroke="#e74c3c" stroke-width="8" stroke-linecap="round"/>
+    <!-- Pivot -->
+    <circle cx="0" cy="120" r="12" fill="#e74c3c"/>
+    <!-- Weight -->
+    <rect x="-18" y="-40" width="36" height="16" rx="4" fill="#e74c3c"/>
+    <!-- Scale marks -->
+    <rect x="-25" y="60" width="50" height="3" rx="1" fill="#888"/>
+    <rect x="-20" y="30" width="40" height="3" rx="1" fill="#888"/>
+    <rect x="-15" y="0" width="30" height="3" rx="1" fill="#888"/>
+  </g>
+</svg>

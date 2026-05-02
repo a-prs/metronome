@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Metronome">
+<meta name="theme-color" content="#ffffff">
+<title>Metronome</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+:root {
+  --bg: #ffffff;
+  --fg: #111111;
+  --bg2: #f4f4f4;
+  --border: #cccccc;
+  --accent: #e74c3c;
+  --btn-bg: #111111;
+  --btn-fg: #ffffff;
+  --btn-active-bg: #e74c3c;
+  --btn-active-fg: #ffffff;
+  --dot-off: #dddddd;
+  --dot-on: #e74c3c;
+  --dot-accent: #2c3e50;
+  --slider-track: #cccccc;
+  --slider-thumb: #111111;
+  --shadow: rgba(0,0,0,0.08);
+}
+.dark {
+  --bg: #1a1a1a;
+  --fg: #e8e8e8;
+  --bg2: #252525;
+  --border: #444444;
+  --accent: #ff6b6b;
+  --btn-bg: #e8e8e8;
+  --btn-fg: #1a1a1a;
+  --btn-active-bg: #ff6b6b;
+  --btn-active-fg: #ffffff;
+  --dot-off: #444444;
+  --dot-on: #ff6b6b;
+  --dot-accent: #5dade2;
+  --slider-track: #444444;
+  --slider-thumb: #e8e8e8;
+  --shadow: rgba(0,0,0,0.3);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: background 0.3s, color 0.3s;
+  padding: 16px;
+  -webkit-tap-highlight-color: transparent;
+}
+.container {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 8px 0 24px;
+}
+/* Header */
+.header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.header h1 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+.theme-btn {
+  background: none;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+  cursor: pointer;
+  color: var(--fg);
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.3s;
+}
+.theme-btn:hover { border-color: var(--fg); }
+
+/* BPM display */
+.bpm-display {
+  text-align: center;
+  user-select: none;
+}
+.bpm-value {
+  font-size: 5rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -3px;
+  font-variant-numeric: tabular-nums;
+}
+.bpm-label {
+  font-size: 0.9rem;
+  opacity: 0.5;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-top: 4px;
+}
+
+/* BPM slider */
+.bpm-slider-wrap {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.bpm-slider-wrap button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 1.4rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: border-color 0.2s;
+}
+.bpm-slider-wrap button:hover { border-color: var(--fg); }
+.bpm-slider-wrap button:active { background: var(--bg2); }
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--slider-track);
+  outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--slider-thumb);
+  cursor: pointer;
+  border: none;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--slider-thumb);
+  cursor: pointer;
+  border: none;
+}
+
+/* Beat dots */
+.beat-dots {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  min-height: 36px;
+  align-items: center;
+}
+.beat-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--dot-off);
+  transition: background 0.08s, transform 0.08s;
+}
+.beat-dot.active {
+  background: var(--dot-on);
+  transform: scale(1.3);
+}
+.beat-dot.active.accent-dot {
+  background: var(--dot-accent);
+  transform: scale(1.45);
+}
+
+/* Play button */
+.play-btn {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: none;
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  font-size: 1.8rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px var(--shadow);
+  transition: background 0.2s, transform 0.1s;
+}
+.play-btn:active { transform: scale(0.95); }
+.play-btn.playing {
+  background: var(--btn-active-bg);
+  color: var(--btn-active-fg);
+}
+
+/* Controls grid */
+.controls {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.control-group {
+  background: var(--bg2);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.control-group.full-width {
+  grid-column: 1 / -1;
+}
+.control-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  opacity: 0.5;
+  font-weight: 600;
+}
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--bg);
+  color: var(--fg);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 32px 10px 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='2' fill='none'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  transition: border-color 0.2s;
+}
+select:hover { border-color: var(--fg); }
+
+/* Toggle switch */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.toggle {
+  position: relative;
+  width: 48px;
+  height: 28px;
+  flex-shrink: 0;
+}
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--slider-track);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  left: 3px;
+  bottom: 3px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.3s;
+}
+.toggle input:checked + .toggle-slider {
+  background: var(--accent);
+}
+.toggle input:checked + .toggle-slider::before {
+  transform: translateX(20px);
+}
+
+/* Volume */
+.volume-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.volume-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+.volume-wrap input[type="range"] {
+  flex: 1;
+}
+
+/* Tap tempo */
+.tap-btn {
+  width: 100%;
+  padding: 14px;
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--fg);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: border-color 0.2s, background 0.1s;
+}
+.tap-btn:active {
+  background: var(--bg2);
+  border-color: var(--fg);
+}
+
+/* Tempo marking */
+.tempo-marking {
+  font-size: 0.85rem;
+  opacity: 0.4;
+  font-style: italic;
+}
+
+@media (max-width: 360px) {
+  .bpm-value { font-size: 3.8rem; }
+  .controls { grid-template-columns: 1fr; }
+  .beat-dot { width: 22px; height: 22px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Metronome</h1>
+    <button class="theme-btn" id="themeBtn" title="Тема">&#9790;</button>
+  </div>
+
+  <div class="bpm-display">
+    <div class="bpm-value" id="bpmValue">120</div>
+    <div class="bpm-label">BPM</div>
+    <div class="tempo-marking" id="tempoMarking">Allegro</div>
+  </div>
+
+  <div class="bpm-slider-wrap">
+    <button id="bpmDec" aria-label="Уменьшить BPM">&minus;</button>
+    <input type="range" id="bpmSlider" min="20" max="300" value="120">
+    <button id="bpmInc" aria-label="Увеличить BPM">+</button>
+  </div>
+
+  <div class="beat-dots" id="beatDots"></div>
+
+  <button class="play-btn" id="playBtn" aria-label="Старт/Стоп">&#9654;</button>
+
+  <div class="controls">
+    <div class="control-group">
+      <div class="control-label">Размер</div>
+      <select id="timeSig">
+        <option value="4">4/4</option>
+        <option value="3">3/4</option>
+        <option value="2">2/4</option>
+        <option value="6">6/8</option>
+        <option value="5">5/4</option>
+        <option value="7">7/8</option>
+        <option value="1">1/4</option>
+      </select>
+    </div>
+    <div class="control-group">
+      <div class="control-label">Паттерн</div>
+      <select id="pattern">
+        <option value="straight">Прямой</option>
+        <option value="eighth">Восьмые</option>
+        <option value="triplet">Триоли</option>
+        <option value="sixteenth">Шестнадцатые</option>
+        <option value="swing">Свинг</option>
+        <option value="dotted">Пунктирный</option>
+        <option value="clave32">Клаве 3-2</option>
+      </select>
+    </div>
+    <div class="control-group">
+      <div class="control-label">Акцент 1-й доли</div>
+      <div class="toggle-row">
+        <span style="font-size:0.9rem;font-weight:600" id="accentLabel">Вкл</span>
+        <label class="toggle">
+          <input type="checkbox" id="accentToggle" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+    <div class="control-group">
+      <div class="control-label">Громкость</div>
+      <div class="volume-wrap">
+        <span class="volume-icon">&#128264;</span>
+        <input type="range" id="volumeSlider" min="0" max="100" value="80">
+      </div>
+    </div>
+    <div class="control-group full-width">
+      <button class="tap-btn" id="tapBtn">Tap Tempo</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // --- State ---
+  let bpm = 120;
+  let playing = false;
+  let beatsPerMeasure = 4;
+  let currentBeat = 0;
+  let accentEnabled = true;
+  let volume = 0.8;
+  let patternType = 'straight';
+
+  // --- Audio ---
+  let audioCtx = null;
+  let masterGain = null;
+  let nextNoteTime = 0;
+  let schedulerTimer = null;
+  const scheduleAheadTime = 0.1;
+  const lookahead = 25; // ms
+
+  function initAudio() {
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = volume;
+    masterGain.connect(audioCtx.destination);
+  }
+
+  // Generate click sound using oscillator
+  function playClick(time, isAccent, isSubdivision) {
+    const osc = audioCtx.createOscillator();
+    const env = audioCtx.createGain();
+
+    if (isSubdivision) {
+      osc.frequency.value = 600;
+      env.gain.setValueAtTime(0.25, time);
+    } else if (isAccent && accentEnabled) {
+      osc.frequency.value = 1500;
+      env.gain.setValueAtTime(1.0, time);
+    } else {
+      osc.frequency.value = 1000;
+      env.gain.setValueAtTime(0.6, time);
+    }
+
+    env.gain.exponentialRampToValueAtTime(0.001, time + 0.06);
+
+    osc.connect(env);
+    env.connect(masterGain);
+    osc.start(time);
+    osc.stop(time + 0.06);
+  }
+
+  // --- Patterns ---
+  // Returns array of {offset: fraction of beat, isSubdivision: bool}
+  function getSubdivisions() {
+    switch (patternType) {
+      case 'eighth':
+        return [{offset: 0, sub: false}, {offset: 0.5, sub: true}];
+      case 'triplet':
+        return [{offset: 0, sub: false}, {offset: 1/3, sub: true}, {offset: 2/3, sub: true}];
+      case 'sixteenth':
+        return [{offset: 0, sub: false}, {offset: 0.25, sub: true}, {offset: 0.5, sub: true}, {offset: 0.75, sub: true}];
+      case 'swing':
+        return [{offset: 0, sub: false}, {offset: 2/3, sub: true}];
+      case 'dotted':
+        return [{offset: 0, sub: false}, {offset: 0.75, sub: true}];
+      case 'clave32':
+        // 3-2 son clave over one measure — scheduled differently
+        return null; // handled separately
+      default:
+        return [{offset: 0, sub: false}];
+    }
+  }
+
+  // Clave 3-2 pattern: hits at beats 1, 1.5, 2.5, 3, 4 (for 4/4)
+  function getClave32Hits(beatsInMeasure) {
+    if (beatsInMeasure >= 4) {
+      return [0, 1.5, 2.5, 3, 3.5];
+    }
+    // Fallback for other time signatures: just straight
+    return Array.from({length: beatsInMeasure}, (_, i) => i);
+  }
+
+  // --- Scheduler ---
+  let subQueue = []; // queued subdivision events
+  let measureBeat = 0;
+
+  function scheduleNote() {
+    const secondsPerBeat = 60.0 / bpm;
+    const isAccent = (measureBeat === 0);
+
+    if (patternType === 'clave32') {
+      const claveHits = getClave32Hits(beatsPerMeasure);
+      // Check if current measureBeat is a clave hit
+      const isClave = claveHits.some(h => Math.abs(h - measureBeat) < 0.01);
+      if (isClave) {
+        playClick(nextNoteTime, isAccent, false);
+      }
+      // Also schedule half-beat hits
+      claveHits.forEach(h => {
+        const frac = h - measureBeat;
+        if (frac > 0.01 && frac < 1.0) {
+          playClick(nextNoteTime + frac * secondsPerBeat, false, false);
+        }
+      });
+    } else {
+      const subdivs = getSubdivisions();
+      subdivs.forEach(s => {
+        playClick(
+          nextNoteTime + s.offset * secondsPerBeat,
+          isAccent && s.offset === 0,
+          s.sub
+        );
+      });
+    }
+
+    // Visual update
+    scheduleVisual(measureBeat, nextNoteTime);
+
+    // Advance
+    nextNoteTime += secondsPerBeat;
+    measureBeat = (measureBeat + 1) % beatsPerMeasure;
+  }
+
+  function scheduler() {
+    while (nextNoteTime < audioCtx.currentTime + scheduleAheadTime) {
+      scheduleNote();
+    }
+  }
+
+  // Visual beat update via setTimeout aligned to audio time
+  function scheduleVisual(beat, time) {
+    const delay = (time - audioCtx.currentTime) * 1000;
+    setTimeout(() => {
+      currentBeat = beat;
+      updateDots();
+    }, Math.max(0, delay));
+  }
+
+  // --- UI ---
+  const bpmValueEl = document.getElementById('bpmValue');
+  const bpmSliderEl = document.getElementById('bpmSlider');
+  const playBtnEl = document.getElementById('playBtn');
+  const beatDotsEl = document.getElementById('beatDots');
+  const timeSigEl = document.getElementById('timeSig');
+  const patternEl = document.getElementById('pattern');
+  const accentToggleEl = document.getElementById('accentToggle');
+  const accentLabelEl = document.getElementById('accentLabel');
+  const volumeSliderEl = document.getElementById('volumeSlider');
+  const tapBtnEl = document.getElementById('tapBtn');
+  const themeBtnEl = document.getElementById('themeBtn');
+  const tempoMarkingEl = document.getElementById('tempoMarking');
+
+  function getTempoMarking(bpm) {
+    if (bpm < 30) return 'Grave';
+    if (bpm < 50) return 'Largo';
+    if (bpm < 56) return 'Larghetto';
+    if (bpm < 66) return 'Adagio';
+    if (bpm < 76) return 'Andante';
+    if (bpm < 92) return 'Andante moderato';
+    if (bpm < 108) return 'Moderato';
+    if (bpm < 120) return 'Allegretto';
+    if (bpm < 140) return 'Allegro';
+    if (bpm < 168) return 'Vivace';
+    if (bpm < 200) return 'Presto';
+    return 'Prestissimo';
+  }
+
+  function updateBPMDisplay() {
+    bpmValueEl.textContent = bpm;
+    bpmSliderEl.value = bpm;
+    tempoMarkingEl.textContent = getTempoMarking(bpm);
+  }
+
+  function createDots() {
+    beatDotsEl.innerHTML = '';
+    for (let i = 0; i < beatsPerMeasure; i++) {
+      const dot = document.createElement('div');
+      dot.className = 'beat-dot';
+      beatDotsEl.appendChild(dot);
+    }
+  }
+
+  function updateDots() {
+    const dots = beatDotsEl.children;
+    for (let i = 0; i < dots.length; i++) {
+      dots[i].classList.remove('active', 'accent-dot');
+      if (i === currentBeat) {
+        dots[i].classList.add('active');
+        if (i === 0 && accentEnabled) {
+          dots[i].classList.add('accent-dot');
+        }
+      }
+    }
+  }
+
+  function startMetronome() {
+    initAudio();
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    playing = true;
+    measureBeat = 0;
+    currentBeat = 0;
+    nextNoteTime = audioCtx.currentTime + 0.05;
+    schedulerTimer = setInterval(scheduler, lookahead);
+    playBtnEl.classList.add('playing');
+    playBtnEl.innerHTML = '&#9632;'; // stop icon
+  }
+
+  function stopMetronome() {
+    playing = false;
+    clearInterval(schedulerTimer);
+    schedulerTimer = null;
+    playBtnEl.classList.remove('playing');
+    playBtnEl.innerHTML = '&#9654;'; // play icon
+    // Reset dots
+    const dots = beatDotsEl.children;
+    for (let i = 0; i < dots.length; i++) {
+      dots[i].classList.remove('active', 'accent-dot');
+    }
+  }
+
+  // --- Event listeners ---
+  playBtnEl.addEventListener('click', () => {
+    if (playing) stopMetronome();
+    else startMetronome();
+  });
+
+  bpmSliderEl.addEventListener('input', (e) => {
+    bpm = parseInt(e.target.value);
+    updateBPMDisplay();
+  });
+
+  document.getElementById('bpmDec').addEventListener('click', () => {
+    bpm = Math.max(20, bpm - 1);
+    updateBPMDisplay();
+  });
+
+  document.getElementById('bpmInc').addEventListener('click', () => {
+    bpm = Math.min(300, bpm + 1);
+    updateBPMDisplay();
+  });
+
+  timeSigEl.addEventListener('change', (e) => {
+    beatsPerMeasure = parseInt(e.target.value);
+    createDots();
+    if (playing) {
+      stopMetronome();
+      startMetronome();
+    }
+  });
+
+  patternEl.addEventListener('change', (e) => {
+    patternType = e.target.value;
+  });
+
+  accentToggleEl.addEventListener('change', (e) => {
+    accentEnabled = e.target.checked;
+    accentLabelEl.textContent = accentEnabled ? 'Вкл' : 'Выкл';
+  });
+
+  volumeSliderEl.addEventListener('input', (e) => {
+    volume = parseInt(e.target.value) / 100;
+    if (masterGain) masterGain.gain.value = volume;
+  });
+
+  // Tap tempo
+  let tapTimes = [];
+  tapBtnEl.addEventListener('click', () => {
+    const now = performance.now();
+    // Reset if last tap was > 2 seconds ago
+    if (tapTimes.length > 0 && now - tapTimes[tapTimes.length - 1] > 2000) {
+      tapTimes = [];
+    }
+    tapTimes.push(now);
+    if (tapTimes.length > 6) tapTimes.shift();
+
+    if (tapTimes.length >= 2) {
+      let totalInterval = 0;
+      for (let i = 1; i < tapTimes.length; i++) {
+        totalInterval += tapTimes[i] - tapTimes[i - 1];
+      }
+      const avgInterval = totalInterval / (tapTimes.length - 1);
+      bpm = Math.round(60000 / avgInterval);
+      bpm = Math.max(20, Math.min(300, bpm));
+      updateBPMDisplay();
+    }
+  });
+
+  // Theme toggle
+  let darkMode = false;
+  themeBtnEl.addEventListener('click', () => {
+    darkMode = !darkMode;
+    document.body.classList.toggle('dark', darkMode);
+    themeBtnEl.innerHTML = darkMode ? '&#9788;' : '&#9790;';
+  });
+
+  // Keyboard: space to start/stop
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && e.target === document.body) {
+      e.preventDefault();
+      if (playing) stopMetronome();
+      else startMetronome();
+    }
+    if (e.code === 'ArrowUp') {
+      e.preventDefault();
+      bpm = Math.min(300, bpm + 1);
+      updateBPMDisplay();
+    }
+    if (e.code === 'ArrowDown') {
+      e.preventDefault();
+      bpm = Math.max(20, bpm - 1);
+      updateBPMDisplay();
+    }
+  });
+
+  // Init
+  createDots();
+  updateBPMDisplay();
+
+  // Register Service Worker for offline PWA
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>
