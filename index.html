@@ -435,49 +435,35 @@ select:hover { border-color: var(--fg); }
   let patternType = 'straight';
 
   // --- Audio ---
+  // iOS Safari requires AudioContext creation + resume to happen
+  // synchronously inside a user gesture (touchend/click).
+  // No Promises, no async — everything must be in the same call stack.
   let audioCtx = null;
   let masterGain = null;
   let nextNoteTime = 0;
   let schedulerTimer = null;
-  let audioUnlocked = false;
   const scheduleAheadTime = 0.1;
   const lookahead = 25; // ms
 
-  function initAudio() {
-    if (audioCtx) return;
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    masterGain = audioCtx.createGain();
-    masterGain.gain.value = volume;
-    masterGain.connect(audioCtx.destination);
-  }
-
-  // iOS requires audio unlock: play a silent buffer on first user gesture
-  function unlockAudio() {
-    if (audioUnlocked) return Promise.resolve();
-    initAudio();
-    if (audioCtx.state === 'suspended') {
-      return audioCtx.resume().then(() => {
-        // Play silent buffer to fully unlock on iOS
-        const buf = audioCtx.createBuffer(1, 1, 22050);
-        const src = audioCtx.createBufferSource();
-        src.buffer = buf;
-        src.connect(audioCtx.destination);
-        src.start(0);
-        audioUnlocked = true;
-      });
+  // Called synchronously from click/touchend handlers
+  function ensureAudio() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      masterGain = audioCtx.createGain();
+      masterGain.gain.value = volume;
+      masterGain.connect(audioCtx.destination);
     }
-    audioUnlocked = true;
-    return Promise.resolve();
+    // Resume synchronously — this is the key for iOS
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    // Play a silent buffer to fully unlock iOS audio pipeline
+    const buf = audioCtx.createBuffer(1, 1, 22050);
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(audioCtx.destination);
+    src.start(0);
   }
-
-  // Unlock on any first touch/click
-  const unlockEvents = ['touchstart', 'touchend', 'mousedown', 'click'];
-  function onFirstInteraction() {
-    unlockAudio().then(() => {
-      unlockEvents.forEach(e => document.removeEventListener(e, onFirstInteraction, true));
-    });
-  }
-  unlockEvents.forEach(e => document.addEventListener(e, onFirstInteraction, true));
 
   // Generate click sound using oscillator
   function playClick(time, isAccent, isSubdivision) {
@@ -648,16 +634,15 @@ select:hover { border-color: var(--fg); }
   }
 
   function startMetronome() {
-    initAudio();
-    unlockAudio().then(() => {
-      playing = true;
-      measureBeat = 0;
-      currentBeat = 0;
-      nextNoteTime = audioCtx.currentTime + 0.05;
-      schedulerTimer = setInterval(scheduler, lookahead);
-      playBtnEl.classList.add('playing');
-      playBtnEl.innerHTML = '&#9632;'; // stop icon
-    });
+    // All of this runs synchronously inside the click handler
+    ensureAudio();
+    playing = true;
+    measureBeat = 0;
+    currentBeat = 0;
+    nextNoteTime = audioCtx.currentTime + 0.05;
+    schedulerTimer = setInterval(scheduler, lookahead);
+    playBtnEl.classList.add('playing');
+    playBtnEl.innerHTML = '&#9632;'; // stop icon
   }
 
   function stopMetronome() {
