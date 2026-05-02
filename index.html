@@ -182,14 +182,26 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 50%;
   background: var(--dot-off);
   transition: background 0.08s, transform 0.08s;
+  cursor: pointer;
+  border: 2px solid transparent;
+  position: relative;
+}
+.beat-dot.accented {
+  border-color: var(--dot-accent);
 }
 .beat-dot.active {
   background: var(--dot-on);
   transform: scale(1.3);
 }
-.beat-dot.active.accent-dot {
+.beat-dot.active.accented {
   background: var(--dot-accent);
   transform: scale(1.45);
+}
+.beat-dots-hint {
+  font-size: 0.7rem;
+  opacity: 0.35;
+  text-align: center;
+  width: 100%;
 }
 
 /* Play button */
@@ -343,6 +355,53 @@ select:hover { border-color: var(--fg); }
   font-style: italic;
 }
 
+/* Trainer & Timer info bar */
+.info-bar {
+  width: 100%;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.info-badge {
+  background: var(--bg2);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  display: none;
+}
+.info-badge.visible { display: block; }
+
+/* Compact inputs inside control groups */
+.trainer-row, .timer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.trainer-row input, .timer-row input {
+  width: 60px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+}
+.trainer-row span, .timer-row span {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+.small-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
 @media (max-width: 360px) {
   .bpm-value { font-size: 3.8rem; }
   .controls { grid-template-columns: 1fr; }
@@ -370,6 +429,13 @@ select:hover { border-color: var(--fg); }
   </div>
 
   <div class="beat-dots" id="beatDots"></div>
+  <div class="beat-dots-hint">нажми на долю для акцента</div>
+
+  <div class="info-bar">
+    <div class="info-badge" id="barCounter">Такт: 0</div>
+    <div class="info-badge" id="trainerInfo">+0 BPM через 0 т.</div>
+    <div class="info-badge" id="timerInfo">00:00</div>
+  </div>
 
   <button class="play-btn" id="playBtn" aria-label="Старт/Стоп">&#9654;</button>
 
@@ -428,6 +494,35 @@ select:hover { border-color: var(--fg); }
       </div>
     </div>
     <div class="control-group full-width">
+      <div class="control-label">Тренажёр темпа</div>
+      <div class="small-toggle-row">
+        <div class="trainer-row">
+          <span>+</span>
+          <input type="number" id="trainerBpm" value="5" min="1" max="50">
+          <span>BPM каждые</span>
+          <input type="number" id="trainerBars" value="8" min="1" max="64">
+          <span>т.</span>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="trainerToggle">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+    <div class="control-group full-width">
+      <div class="control-label">Таймер практики</div>
+      <div class="small-toggle-row">
+        <div class="timer-row">
+          <input type="number" id="timerMinutes" value="10" min="1" max="120">
+          <span>мин</span>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="timerToggle">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+    <div class="control-group full-width">
       <button class="tap-btn" id="tapBtn">Tap Tempo</button>
     </div>
   </div>
@@ -446,6 +541,25 @@ select:hover { border-color: var(--fg); }
   let volume = 0.8;
   let patternType = 'straight';
   let soundType = 'click';
+
+  // Per-beat accent map (true = accented)
+  let beatAccents = [true, false, false, false];
+
+  // Trainer state
+  let trainerEnabled = false;
+  let trainerBpmAdd = 5;
+  let trainerEveryBars = 8;
+  let trainerBarCount = 0;
+  let trainerBarsInPhrase = 0;
+
+  // Timer state
+  let timerEnabled = false;
+  let timerMinutes = 10;
+  let timerRemaining = 0; // seconds
+  let timerInterval = null;
+
+  // Bar counter
+  let totalBars = 0;
 
   // --- Audio ---
   // iOS Safari requires AudioContext creation + resume to happen
@@ -697,16 +811,15 @@ select:hover { border-color: var(--fg); }
 
   function scheduleNote() {
     const secondsPerBeat = 60.0 / bpm;
-    const isAccent = (measureBeat === 0);
+    // Use per-beat accent map
+    const isAccent = beatAccents[measureBeat] || false;
 
     if (patternType === 'clave32') {
       const claveHits = getClave32Hits(beatsPerMeasure);
-      // Check if current measureBeat is a clave hit
       const isClave = claveHits.some(h => Math.abs(h - measureBeat) < 0.01);
       if (isClave) {
         playClick(nextNoteTime, isAccent, false);
       }
-      // Also schedule half-beat hits
       claveHits.forEach(h => {
         const frac = h - measureBeat;
         if (frac > 0.01 && frac < 1.0) {
@@ -727,9 +840,26 @@ select:hover { border-color: var(--fg); }
     // Visual update
     scheduleVisual(measureBeat, nextNoteTime);
 
-    // Advance
+    // Advance beat, handle bar completion
     nextNoteTime += secondsPerBeat;
     measureBeat = (measureBeat + 1) % beatsPerMeasure;
+
+    // Bar completed
+    if (measureBeat === 0) {
+      totalBars++;
+      updateBarCounter();
+
+      // Trainer: increase BPM every N bars
+      if (trainerEnabled) {
+        trainerBarsInPhrase++;
+        updateTrainerInfo();
+        if (trainerBarsInPhrase >= trainerEveryBars) {
+          trainerBarsInPhrase = 0;
+          bpm = Math.min(300, bpm + trainerBpmAdd);
+          updateBPMDisplay();
+        }
+      }
+    }
   }
 
   function scheduler() {
@@ -783,11 +913,21 @@ select:hover { border-color: var(--fg); }
     tempoMarkingEl.textContent = getTempoMarking(bpm);
   }
 
+  function initBeatAccents() {
+    beatAccents = new Array(beatsPerMeasure).fill(false);
+    if (accentEnabled) beatAccents[0] = true;
+  }
+
   function createDots() {
     beatDotsEl.innerHTML = '';
     for (let i = 0; i < beatsPerMeasure; i++) {
       const dot = document.createElement('div');
       dot.className = 'beat-dot';
+      if (beatAccents[i]) dot.classList.add('accented');
+      dot.addEventListener('click', () => {
+        beatAccents[i] = !beatAccents[i];
+        dot.classList.toggle('accented', beatAccents[i]);
+      });
       beatDotsEl.appendChild(dot);
     }
   }
@@ -795,29 +935,68 @@ select:hover { border-color: var(--fg); }
   function updateDots() {
     const dots = beatDotsEl.children;
     for (let i = 0; i < dots.length; i++) {
-      dots[i].classList.remove('active', 'accent-dot');
+      dots[i].classList.remove('active');
       if (i === currentBeat) {
         dots[i].classList.add('active');
-        if (i === 0 && accentEnabled) {
-          dots[i].classList.add('accent-dot');
-        }
       }
     }
   }
 
+  function updateBarCounter() {
+    const el = document.getElementById('barCounter');
+    el.textContent = 'Такт: ' + totalBars;
+    el.classList.add('visible');
+  }
+
+  function updateTrainerInfo() {
+    const el = document.getElementById('trainerInfo');
+    const remaining = trainerEveryBars - trainerBarsInPhrase;
+    el.textContent = '+' + trainerBpmAdd + ' BPM через ' + remaining + ' т.';
+    el.classList.toggle('visible', trainerEnabled);
+  }
+
+  function startTimer() {
+    timerRemaining = timerMinutes * 60;
+    const el = document.getElementById('timerInfo');
+    el.classList.add('visible');
+    updateTimerDisplay();
+    timerInterval = setInterval(() => {
+      timerRemaining--;
+      updateTimerDisplay();
+      if (timerRemaining <= 0) {
+        stopMetronome();
+      }
+    }, 1000);
+  }
+
+  function stopTimer() {
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    document.getElementById('timerInfo').classList.remove('visible');
+  }
+
+  function updateTimerDisplay() {
+    const m = Math.floor(timerRemaining / 60);
+    const s = timerRemaining % 60;
+    document.getElementById('timerInfo').textContent =
+      String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+
   function startMetronome() {
-    // All of this runs synchronously inside the click handler
     ensureAudio();
     playing = true;
     measureBeat = 0;
     currentBeat = 0;
+    totalBars = 0;
+    trainerBarsInPhrase = 0;
     nextNoteTime = audioCtx.currentTime + 0.05;
     schedulerTimer = setInterval(scheduler, lookahead);
     playBtnEl.classList.add('playing');
-    playBtnEl.innerHTML = '&#9632;'; // stop icon
-    // Keep screen on & audio session alive
+    playBtnEl.innerHTML = '&#9632;';
     requestWakeLock();
     startSilentAudio();
+    updateBarCounter();
+    if (trainerEnabled) updateTrainerInfo();
+    if (timerEnabled) startTimer();
   }
 
   function stopMetronome() {
@@ -825,13 +1004,15 @@ select:hover { border-color: var(--fg); }
     clearInterval(schedulerTimer);
     schedulerTimer = null;
     playBtnEl.classList.remove('playing');
-    playBtnEl.innerHTML = '&#9654;'; // play icon
+    playBtnEl.innerHTML = '&#9654;';
     releaseWakeLock();
     stopSilentAudio();
-    // Reset dots
+    stopTimer();
+    document.getElementById('barCounter').classList.remove('visible');
+    document.getElementById('trainerInfo').classList.remove('visible');
     const dots = beatDotsEl.children;
     for (let i = 0; i < dots.length; i++) {
-      dots[i].classList.remove('active', 'accent-dot');
+      dots[i].classList.remove('active');
     }
   }
 
@@ -858,6 +1039,7 @@ select:hover { border-color: var(--fg); }
 
   timeSigEl.addEventListener('change', (e) => {
     beatsPerMeasure = parseInt(e.target.value);
+    initBeatAccents();
     createDots();
     if (playing) {
       stopMetronome();
@@ -873,9 +1055,41 @@ select:hover { border-color: var(--fg); }
     soundType = e.target.value;
   });
 
+  // Trainer controls
+  const trainerToggleEl = document.getElementById('trainerToggle');
+  const trainerBpmEl = document.getElementById('trainerBpm');
+  const trainerBarsEl = document.getElementById('trainerBars');
+  trainerToggleEl.addEventListener('change', (e) => {
+    trainerEnabled = e.target.checked;
+    document.getElementById('trainerInfo').classList.toggle('visible', trainerEnabled && playing);
+  });
+  trainerBpmEl.addEventListener('change', (e) => {
+    trainerBpmAdd = Math.max(1, Math.min(50, parseInt(e.target.value) || 5));
+    e.target.value = trainerBpmAdd;
+  });
+  trainerBarsEl.addEventListener('change', (e) => {
+    trainerEveryBars = Math.max(1, Math.min(64, parseInt(e.target.value) || 8));
+    e.target.value = trainerEveryBars;
+  });
+
+  // Timer controls
+  const timerToggleEl = document.getElementById('timerToggle');
+  const timerMinutesEl = document.getElementById('timerMinutes');
+  timerToggleEl.addEventListener('change', (e) => {
+    timerEnabled = e.target.checked;
+  });
+  timerMinutesEl.addEventListener('change', (e) => {
+    timerMinutes = Math.max(1, Math.min(120, parseInt(e.target.value) || 10));
+    e.target.value = timerMinutes;
+  });
+
   accentToggleEl.addEventListener('change', (e) => {
     accentEnabled = e.target.checked;
     accentLabelEl.textContent = accentEnabled ? 'Вкл' : 'Выкл';
+    // Sync beat 1 accent with toggle
+    beatAccents[0] = accentEnabled;
+    const dots = beatDotsEl.children;
+    if (dots[0]) dots[0].classList.toggle('accented', accentEnabled);
   });
 
   volumeSliderEl.addEventListener('input', (e) => {
@@ -934,6 +1148,7 @@ select:hover { border-color: var(--fg); }
   });
 
   // Init
+  initBeatAccents();
   createDots();
   updateBPMDisplay();
 
