@@ -445,6 +445,41 @@ select:hover { border-color: var(--fg); }
   const scheduleAheadTime = 0.1;
   const lookahead = 25; // ms
 
+  // --- Wake Lock (prevent screen from dimming) ---
+  let wakeLock = null;
+  async function requestWakeLock() {
+    if ('wakeLock' in navigator) {
+      try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e) {}
+    }
+  }
+  function releaseWakeLock() {
+    if (wakeLock) { wakeLock.release(); wakeLock = null; }
+  }
+  // Re-acquire wake lock when page becomes visible again
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && playing) {
+      requestWakeLock();
+      // Also revive audio context if it got suspended
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    }
+  });
+
+  // --- Silent audio keeper (prevents OS from killing audio session) ---
+  let silentAudio = null;
+  function startSilentAudio() {
+    if (silentAudio) return;
+    // Generate a tiny silent WAV as data URL
+    // 1 second of silence, mono, 8kHz, 8-bit
+    const header = 'UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAABAAgAZGF0YQAAAAA=';
+    silentAudio = new Audio('data:audio/wav;base64,' + header);
+    silentAudio.loop = true;
+    silentAudio.volume = 0.01; // nearly silent
+    silentAudio.play().catch(() => {});
+  }
+  function stopSilentAudio() {
+    if (silentAudio) { silentAudio.pause(); silentAudio = null; }
+  }
+
   // Called synchronously from click/touchend handlers
   function ensureAudio() {
     if (!audioCtx) {
@@ -643,6 +678,9 @@ select:hover { border-color: var(--fg); }
     schedulerTimer = setInterval(scheduler, lookahead);
     playBtnEl.classList.add('playing');
     playBtnEl.innerHTML = '&#9632;'; // stop icon
+    // Keep screen on & audio session alive
+    requestWakeLock();
+    startSilentAudio();
   }
 
   function stopMetronome() {
@@ -651,6 +689,8 @@ select:hover { border-color: var(--fg); }
     schedulerTimer = null;
     playBtnEl.classList.remove('playing');
     playBtnEl.innerHTML = '&#9654;'; // play icon
+    releaseWakeLock();
+    stopSilentAudio();
     // Reset dots
     const dots = beatDotsEl.children;
     for (let i = 0; i < dots.length; i++) {
