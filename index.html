@@ -439,6 +439,7 @@ select:hover { border-color: var(--fg); }
   let masterGain = null;
   let nextNoteTime = 0;
   let schedulerTimer = null;
+  let audioUnlocked = false;
   const scheduleAheadTime = 0.1;
   const lookahead = 25; // ms
 
@@ -449,6 +450,34 @@ select:hover { border-color: var(--fg); }
     masterGain.gain.value = volume;
     masterGain.connect(audioCtx.destination);
   }
+
+  // iOS requires audio unlock: play a silent buffer on first user gesture
+  function unlockAudio() {
+    if (audioUnlocked) return Promise.resolve();
+    initAudio();
+    if (audioCtx.state === 'suspended') {
+      return audioCtx.resume().then(() => {
+        // Play silent buffer to fully unlock on iOS
+        const buf = audioCtx.createBuffer(1, 1, 22050);
+        const src = audioCtx.createBufferSource();
+        src.buffer = buf;
+        src.connect(audioCtx.destination);
+        src.start(0);
+        audioUnlocked = true;
+      });
+    }
+    audioUnlocked = true;
+    return Promise.resolve();
+  }
+
+  // Unlock on any first touch/click
+  const unlockEvents = ['touchstart', 'touchend', 'mousedown', 'click'];
+  function onFirstInteraction() {
+    unlockAudio().then(() => {
+      unlockEvents.forEach(e => document.removeEventListener(e, onFirstInteraction, true));
+    });
+  }
+  unlockEvents.forEach(e => document.addEventListener(e, onFirstInteraction, true));
 
   // Generate click sound using oscillator
   function playClick(time, isAccent, isSubdivision) {
@@ -620,16 +649,15 @@ select:hover { border-color: var(--fg); }
 
   function startMetronome() {
     initAudio();
-    if (audioCtx.state === 'suspended') {
-      audioCtx.resume();
-    }
-    playing = true;
-    measureBeat = 0;
-    currentBeat = 0;
-    nextNoteTime = audioCtx.currentTime + 0.05;
-    schedulerTimer = setInterval(scheduler, lookahead);
-    playBtnEl.classList.add('playing');
-    playBtnEl.innerHTML = '&#9632;'; // stop icon
+    unlockAudio().then(() => {
+      playing = true;
+      measureBeat = 0;
+      currentBeat = 0;
+      nextNoteTime = audioCtx.currentTime + 0.05;
+      schedulerTimer = setInterval(scheduler, lookahead);
+      playBtnEl.classList.add('playing');
+      playBtnEl.innerHTML = '&#9632;'; // stop icon
+    });
   }
 
   function stopMetronome() {
